@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>背单词 App - 数据库版</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    
+    <!-- 现在只需要保留图片库，其他数据都走后端 -->
+    <script src="image_bank.js"></script>
+
+    <style>
+        /* 样式代码保持不变，直接复用你之前的样式 */
+        :root { --primary-color: #4A90E2; --success-color: #2ECC71; --error-color: #E74C3C; --stop-color: #E74C3C; --bg-color: #F5F7FA; --text-color: #333; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); margin: 0; display: flex; justify-content: center; min-height: 100vh; }
+        #app { width: 100%; max-width: 450px; background: #fff; box-shadow: 0 0 20px rgba(0,0,0,0.05); display: flex; flex-direction: column; position: relative; overflow: hidden; transition: height 0.3s; min-height: 100vh; }
+        
+        /* ... (为了节省篇幅，请把你之前的 CSS 样式全部复制粘贴在这里，没有任何改动) ... */
+        /* 下面是必须包含的关键样式，防止你漏掉 */
+        .home-container { padding: 40px 20px; display: flex; flex-direction: column; align-items: center; height: 100%; overflow-y: auto; }
+        .modules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; padding-bottom: 30px; }
+        .module-card { height: 140px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px; box-sizing: border-box; color: white; cursor: pointer; position: relative; overflow: hidden; box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
+        .card-study { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card-test { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%); }
+        .card-review { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+        .card-sentence { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); }
+        .card-writing { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .card-speaking { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+        .module-icon { font-size: 36px; margin-bottom: 10px; }
+        .header-bar { height: 50px; display: flex; align-items: center; padding: 0 15px; border-bottom: 1px solid #f0f0f0; background: #fff; position: sticky; top: 0; z-index: 100; }
+        .btn-back { background: none; border: none; font-size: 16px; color: #666; cursor: pointer; display: flex; align-items: center; font-weight: 500; }
+        .page-title { margin-left: auto; margin-right: auto; font-weight: bold; transform: translateX(-15px); }
+        .current-learning-area { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; text-align: center; }
+        .current-book-card { display: flex; align-items: center; justify-content: center; gap: 20px; cursor: pointer; padding: 10px; border-radius: 12px; transition: background 0.2s; }
+        .big-cover { width: 80px; height: 110px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 18px; box-shadow: 3px 3px 10px rgba(0,0,0,0.2); }
+        .book-list-wrapper { overflow: hidden; transition: max-height 0.3s ease-in-out; }
+        .book-list { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 10px 5px 20px; }
+        .book-item { background: white; border-radius: 12px; padding: 15px; display: flex; flex-direction: column; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.03); cursor: pointer; border: 2px solid transparent; transition: all 0.2s; position: relative; opacity: 0.8; }
+        .book-item.active { border-color: var(--primary-color); background-color: #F0F7FF; opacity: 1; }
+        .book-cover { width: 50px; height: 70px; border-radius: 4px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
+        .check-icon { position: absolute; top: 10px; right: 10px; color: var(--primary-color); font-size: 16px; display: none; }
+        .book-item.active .check-icon { display: block; }
+        .dashboard-actions { padding: 20px; background: white; border-top: 1px solid #eee; display: flex; gap: 15px; }
+        .action-btn { flex: 1; padding: 15px; border-radius: 30px; border: none; font-size: 18px; font-weight: 600; cursor: pointer; color: white; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-study-start { background: var(--primary-color); box-shadow: 0 4px 10px rgba(74, 144, 226, 0.3); }
+        .btn-review-start { background: var(--success-color); box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3); }
+        .app-title { font-size: 28px; font-weight: 800; color: var(--text-color); margin-bottom: 30px; letter-spacing: 1px; text-align: center; }
+        .app-title span { color: var(--primary-color); }
+        .bookshelf-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 10px; cursor: pointer; user-select: none; border-bottom: 1px solid transparent; transition: border 0.3s; }
+        .bookshelf-title { font-size: 16px; font-weight: bold; color: #333; }
+        .toggle-icon { color: #999; font-size: 12px; transition: transform 0.3s; }
+        .toggle-icon.expanded { transform: rotate(180deg); }
+        .word-section { padding: 30px 20px 20px; text-align: center; }
+        .word-text { font-size: 32px; font-weight: 700; color: var(--text-color); }
+        .sentence-text { font-size: 22px; font-weight: 600; color: var(--text-color); line-height: 1.5; min-height: 60px; display: flex; align-items: center; justify-content: center; }
+        .image-container-wrapper { position: relative; width: calc(100% - 40px); margin: 0 auto; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.5, 1); overflow: hidden; border-radius: 12px; aspect-ratio: 16 / 9; height: auto; border: 2px dashed #CBD5E0; background-color: #EEF2F7; }
+        .image-container-wrapper.is-collapsed { height: 40px !important; aspect-ratio: auto; border-style: solid; background-color: #F0F4F8; cursor: pointer; }
+        .image-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #A0AEC0; font-size: 14px; position: relative; z-index: 1; }
+        .real-image { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .is-collapsed .image-content { opacity: 0; pointer-events: none; }
+        .ai-controls { position: absolute; top: 8px; left: 8px; display: flex; gap: 8px; z-index: 100; }
+        .toggle-btn { position: absolute; top: 8px; right: 8px; background: rgba(0, 0, 0, 0.4); color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; cursor: pointer; z-index: 100; user-select: none; backdrop-filter: blur(4px); }
+        .ai-btn { width: 32px; height: 32px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); font-size: 16px; transition: transform 0.2s; }
+        .btn-refresh { background: white; color: var(--primary-color); }
+        .btn-stop { background: var(--stop-color); color: white; }
+        .btn-confirm { background: var(--success-color); color: white; }
+        .btn-reject { background: var(--error-color); color: white; }
+        .expand-hint { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #666; font-size: 13px; font-weight: 500; opacity: 0; pointer-events: none; }
+        .is-collapsed .expand-hint { opacity: 1; pointer-events: auto; }
+        .is-collapsed .ai-controls { display: none; }
+        .ai-loading-mask { position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--primary-color); font-weight: bold; font-size: 14px; z-index: 10; }
+        .loading-spinner { width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 8px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .interaction-area { padding: 20px; display: flex; justify-content: center; }
+        .input-line { border: none; border-bottom: 2px solid var(--text-color); width: 80%; text-align: center; font-size: 20px; padding: 10px; outline: none; background: transparent; color: var(--text-color); }
+        .input-sentence { width: 90%; font-size: 18px; border: 2px solid #E0E0E0; border-radius: 8px; padding: 12px; min-height: 60px; text-align: left; resize: none; font-family: inherit; }
+        .input-sentence:focus { border-color: var(--primary-color); outline: none; }
+        .filled-card { background-color: #fff; border: 1px solid var(--primary-color); color: var(--primary-color); padding: 12px 24px; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(74, 144, 226, 0.2); animation: pop-in 0.3s; }
+        @keyframes pop-in { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .options-grid { padding: 10px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .option-card { background: #fff; border: 1px solid #E0E0E0; border-radius: 8px; padding: 15px 10px; text-align: center; cursor: pointer; transition: all 0.2s; font-size: 16px; color: #555; min-height: 40px; display: flex; align-items: center; justify-content: center; }
+        .options-disabled .option-card { opacity: 0.4; pointer-events: none; filter: grayscale(1); }
+        .option-hidden { visibility: hidden; }
+        .footer-action { margin-top: auto; padding: 20px; border-top: 1px solid #f0f0f0; }
+        .btn { width: 100%; padding: 16px; border-radius: 30px; border: none; font-size: 18px; font-weight: 600; cursor: pointer; color: white; }
+        .btn-submit { background-color: var(--primary-color); }
+        .btn-submit:disabled { background-color: #ccc; cursor: not-allowed; }
+        .btn-next { background-color: var(--success-color); }
+        .btn-check { background-color: #F39C12; }
+        .btn-restart { background-color: var(--primary-color); margin-top: 20px; width: 80%;}
+        .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; z-index: 100; animation: fade-in 0.2s; }
+        .modal-bottom { align-items: flex-end; }
+        .modal-center { justify-content: center; align-items: center; }
+        .modal-content-bottom { background: white; width: 100%; border-radius: 20px 20px 0 0; padding: 25px; position: relative; animation: slide-up 0.3s; }
+        .modal-content-center { background: white; width: 80%; border-radius: 16px; padding: 30px 20px; text-align: center; animation: pop-in 0.3s; }
+        .close-icon { position: absolute; top: 15px; right: 20px; font-size: 24px; color: #999; cursor: pointer; }
+        .explanation-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+        .explanation-text { color: #666; line-height: 1.6; margin-bottom: 20px; text-align: left;}
+        .celebration-overlay { position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; display: flex; justify-content: center; align-items: center; z-index: 50; }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.5s; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        .success-text { font-size: 40px; color: var(--success-color); font-weight: bold; text-shadow: 0 2px 10px rgba(255,255,255,0.8); animation: pop-in 0.5s; }
+        .result-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+        .result-icon { font-size: 60px; margin-bottom: 10px; }
+        .test-score-row { display: flex; justify-content: space-around; margin: 20px 0; }
+        .score-item { text-align: center; }
+        .score-num { font-size: 32px; font-weight: bold; }
+        .score-label { font-size: 14px; color: #999; }
+        .text-green { color: var(--success-color); }
+        .text-red { color: var(--error-color); }
+        .switch-btns { display: flex; gap: 15px; margin-top: 20px; }
+        .btn-yes { background: var(--primary-color); color: white; border:none; padding:10px; border-radius:20px; flex:1; cursor:pointer; font-weight:bold;}
+        .btn-no { background: #eee; color: #666; border:none; padding:10px; border-radius:20px; flex:1; cursor:pointer;}
+        .shake { animation: shake-animation 0.5s cubic-bezier(.36,.07,.19,.97) both; color: var(--error-color); }
+        @keyframes shake-animation { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <!-- 页面HTML结构复用之前的，主要是 methods 里不再读本地变量 -->
+    <!-- 1. 主页 (Home) -->
+    <div v-if="currentPage === 'home'" class="home-container">
+        <div class="app-title">VOCAB <span>MASTER</span></div>
+        <div class="modules-grid">
+            <div class="module-card card-study" @click="goToDashboard"><div class="module-icon">📚</div><div class="module-title">学习单词</div><div class="module-desc">AI 辅助记忆</div></div>
+            <div class="module-card card-test" @click="goToTest"><div class="module-icon">📝</div><div class="module-title">词汇自测</div><div class="module-desc">题库混合测试</div></div>
+            <div class="module-card card-sentence" @click="goToSentence"><div class="module-icon">✍️</div><div class="module-title">造句练习</div><div class="module-desc">AI 纠正语法</div></div>
+            <div class="module-card card-review" @click="showComingSoon('单词复习')"><div class="module-icon">🔄</div><div class="module-title">单词复习</div><div class="module-desc">记忆曲线</div></div>
+            <div class="module-card card-writing" @click="showComingSoon('写作练习')"><div class="module-icon">🖋️</div><div class="module-title">写作练习</div><div class="module-desc">主题写作</div></div>
+            <div class="module-card card-speaking" @click="showComingSoon('口语练习')"><div class="module-icon">🎙️</div><div class="module-title">口语练习</div><div class="module-desc">模拟对话</div></div>
+        </div>
+    </div>
+
+    <!-- 2. 学习仪表盘 (Study Dashboard) -->
+    <div v-else-if="currentPage === 'study-dashboard'" class="dashboard-container">
+        <div class="header-bar"><button class="btn-back" @click="goHome"><span>❮ 返回主页</span></button><div class="page-title">学习单词</div></div>
+        <div class="books-section">
+            <div class="current-learning-area" @click="goToBookDetail(currentBookObject)">
+                <div class="current-label">—— 正在学习 ——</div>
+                <div class="current-book-card">
+                    <div class="big-cover" :style="{ background: currentBookObject.color }">{{ currentBookObject.shortName }}</div>
+                    <div class="current-info"><div class="current-name">{{ currentBookObject.name }}</div><div class="current-detail-hint">点击查看详情 ></div></div>
+                </div>
+            </div>
+            <div class="bookshelf-header" @click="toggleBookshelf">
+                <div class="bookshelf-title">我的书架</div><div class="toggle-icon" :class="{ expanded: isBookshelfExpanded }">▼</div>
+            </div>
+            <div class="book-list-wrapper" :style="{ maxHeight: isBookshelfExpanded ? '500px' : '0' }">
+                <div class="book-list">
+                    <div v-for="book in books" :key="book.id" class="book-item" :class="{ active: currentBookId === book.id }" @click="onBookClick(book)">
+                        <div class="book-cover" :style="{ background: book.color }">{{ book.shortName }}</div><div class="book-name">{{ book.name }}</div><div class="check-icon">✔</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="dashboard-actions">
+            <button class="action-btn btn-study-start" @click="startRealStudy"><span>📖</span> 开始学习</button>
+            <button class="action-btn btn-review-start" @click="goToReview"><span>🔄</span> 开始复习</button>
+        </div>
+    </div>
+
+    <!-- 其余页面（BookDetail, Review）略，保持不变 -->
+    <div v-else-if="currentPage === 'book-detail'" style="height: 100%; display: flex; flex-direction: column;">
+        <div class="header-bar"><button class="btn-back" @click="goToDashboard"><span>❮ 返回书架</span></button><div class="page-title">书籍详情</div></div>
+        <div class="blank-page"><div class="blank-icon">📘</div><h3>{{ getBookName(currentDetailBookId) }}</h3><p>这里将展示书籍的详细信息、词汇量统计、学习进度等。</p></div>
+    </div>
+    <div v-else-if="currentPage === 'review'" style="height: 100%; display: flex; flex-direction: column;">
+        <div class="header-bar"><button class="btn-back" @click="goToDashboard"><span>❮ 返回书架</span></button><div class="page-title">单词复习</div></div>
+        <div class="blank-page"><div class="blank-icon">🧠</div><h3>复习模式</h3><p>这里将根据艾宾浩斯记忆曲线安排复习内容。</p></div>
+    </div>
+
+    <!-- 3. 正式学习页面 -->
+    <div v-else-if="currentPage === 'study'" style="height: 100%; display: flex; flex-direction: column;">
+        <div class="header-bar"><button class="btn-back" @click="goToDashboard"><span>❮ 退出学习</span></button><div class="page-title">{{ getBookName(currentBookId) }}</div></div>
+        <div class="progress-bar"><div class="progress-fill" :style="{ width: ((currentIndex + 1) / roundTotal) * 100 + '%' }"></div></div>
+        <div class="progress-text">本轮进度：{{ currentIndex + 1 }} / {{ roundTotal }}</div>
+        <div class="word-section" v-if="currentQuestion"><div class="word-text" :class="{ 'shake': isError }">{{ currentQuestion.word }}</div></div>
+        <div class="image-container-wrapper" :class="{ 'is-collapsed': isImageCollapsed }" @click="isImageCollapsed ? toggleImage() : null">
+            <div class="ai-controls" @click.stop>
+                <button v-if="isGeneratingAI" class="ai-btn btn-stop" @click.stop="stopAI" title="停止">⏹</button>
+                <button v-else-if="!aiReviewMode" class="ai-btn btn-refresh" @click="generateAIImage('word')" title="AI生图">🔄</button>
+                <button v-if="aiReviewMode" class="ai-btn btn-confirm" @click="confirmAIImage" title="保留">√</button>
+                <button v-if="aiReviewMode" class="ai-btn btn-reject" @click="rejectAIImage" title="还原">×</button>
+            </div>
+            <div class="toggle-btn" @click.stop="toggleImage">{{ isImageCollapsed ? '展开 🔽' : '折叠 🔼' }}</div>
+            <div class="image-content">
+                <div v-if="isGeneratingAI" class="ai-loading-mask"><div class="loading-spinner"></div><span>AI 绘图中...</span></div>
+                <img v-if="currentDisplayImage" :src="currentDisplayImage" class="real-image" @error="handleImgError" />
+                <span v-else>暂无图片</span>
+            </div>
+            <div class="expand-hint">点击展开图片</div>
+        </div>
+        <div class="interaction-area">
+            <div v-if="selectedOption" class="filled-card" @click="cancelSelection">{{ selectedOption.text }}</div>
+            <input v-else type="text" class="input-line" v-model="inputValue" placeholder="点击输入中文" @input="handleInput" :disabled="status !== 'answering' || isCheckingAnswer">
+        </div>
+        <div class="options-grid" :class="{ 'options-disabled': hasInputText || isCheckingAnswer || status !== 'answering' }">
+            <div v-for="(opt, index) in currentQuestion?.options" :key="index" class="option-card" :class="{ 'option-hidden': selectedOption && selectedOption.id === opt.id }" @click="selectOption(opt)">{{ opt.text }}</div>
+        </div>
+        <div class="footer-action" v-if="showFooterBtn">
+            <button v-if="status === 'answering'" class="btn btn-submit" @click="submitAnswer" :disabled="isCheckingAnswer">{{ isCheckingAnswer ? 'AI 正在判断...' : '提交答案' }}</button>
+            <button v-else-if="status === 'correct'" class="btn btn-check" @click="openAiSuccessModal">查看解析</button>
+            <button v-else-if="status === 'wrong'" class="btn btn-check" @click="openExplanation">查看解析</button>
+        </div>
+    </div>
+
+    <!-- 4. 词汇自测页面 -->
+    <div v-else-if="currentPage === 'test'" style="height: 100%; display: flex; flex-direction: column;">
+        <div class="header-bar"><button class="btn-back" @click="goHome"><span>❮ 返回主页</span></button><div class="page-title">词汇自测</div></div>
+        <div class="progress-bar"><div class="progress-fill" :style="{ width: ((currentIndex + 1) / roundTotal) * 100 + '%' }"></div></div>
+        <div class="progress-text">测试进度：{{ currentIndex + 1 }} / {{ roundTotal }}</div>
+        <div class="word-section" v-if="currentQuestion"><div class="word-text" :class="{ 'shake': isError }">{{ currentQuestion.word }}</div></div>
+        <div style="flex: 0.5;"></div>
+        <div class="interaction-area">
+            <div v-if="selectedOption" class="filled-card" @click="cancelSelection">{{ selectedOption.text }}</div>
+            <input v-else type="text" class="input-line" v-model="inputValue" placeholder="点击输入中文" @input="handleInput" :disabled="status !== 'answering'">
+        </div>
+        <div class="options-grid" :class="{ 'options-disabled': hasInputText || status !== 'answering' }">
+            <div v-for="(opt, index) in currentQuestion?.options" :key="index" class="option-card" :class="{ 'option-hidden': selectedOption && selectedOption.id === opt.id }" @click="selectOption(opt)">{{ opt.text }}</div>
+        </div>
+        <div class="footer-action" v-if="showFooterBtn">
+            <button v-if="status === 'answering'" class="btn btn-submit" @click="submitAnswer">提交答案</button>
+            <button v-else class="btn btn-next" @click="nextQuestion">下一题</button>
+        </div>
+    </div>
+
+    <!-- 5. 造句练习页面 -->
+    <div v-else-if="currentPage === 'sentence'" style="height: 100%; display: flex; flex-direction: column;">
+        <div class="header-bar"><button class="btn-back" @click="goHome"><span>❮ 返回主页</span></button><div class="page-title">造句练习</div></div>
+        <div class="progress-bar"><div class="progress-fill" :style="{ width: ((currentIndex + 1) / roundTotal) * 100 + '%' }"></div></div>
+        <div class="progress-text">本轮进度：{{ currentIndex + 1 }} / {{ roundTotal }}</div>
+        <div class="word-section">
+            <div v-if="currentSentence" class="sentence-text">{{ currentSentence.chinese }}</div>
+            <div v-else style="color: red; padding: 20px;">⚠️ 数据加载中...</div>
+        </div>
+        <div class="image-container-wrapper" :class="{ 'is-collapsed': isImageCollapsed }" @click="isImageCollapsed ? toggleImage() : null">
+            <div class="ai-controls" @click.stop>
+                <button v-if="isGeneratingAI" class="ai-btn btn-stop" @click.stop="stopAI" title="停止">⏹</button>
+                <button v-else-if="!aiReviewMode" class="ai-btn btn-refresh" @click="generateAIImage('sentence')" title="生图">🔄</button>
+                <button v-if="aiReviewMode" class="ai-btn btn-confirm" @click="confirmAIImage" title="保留">√</button>
+                <button v-if="aiReviewMode" class="ai-btn btn-reject" @click="rejectAIImage" title="还原">×</button>
+            </div>
+            <div class="toggle-btn" @click.stop="toggleImage">{{ isImageCollapsed ? '展开 🔽' : '折叠 🔼' }}</div>
+            <div class="image-content">
+                <div v-if="isGeneratingAI" class="ai-loading-mask"><div class="loading-spinner"></div><span>AI 绘图中...</span></div>
+                <img v-if="currentDisplayImage" :src="currentDisplayImage" class="real-image" @error="handleImgError" />
+                <span v-else>暂无图片</span>
+            </div>
+            <div class="expand-hint">点击展开图片</div>
+        </div>
+        <div class="interaction-area">
+            <textarea class="input-line input-sentence" v-model="inputValue" placeholder="请输入英文句子..." @input="handleInput" :disabled="status !== 'answering' || isCheckingAnswer"></textarea>
+        </div>
+        <div class="footer-action" v-if="hasInputText || status !== 'answering'">
+            <button v-if="status === 'answering'" class="btn btn-submit" @click="submitSentence" :disabled="isCheckingAnswer">{{ isCheckingAnswer ? 'AI 批改中...' : '提交答案' }}</button>
+            <button v-else class="btn btn-next" @click="nextSentence">下一题</button>
+        </div>
+    </div>
+
+    <!-- 弹窗：切换书确认 -->
+    <div class="modal-overlay modal-center" v-if="showSwitchBookModal">
+        <div class="modal-content-center">
+            <div class="result-icon">📖</div>
+            <div class="result-title" style="font-size:18px;">确认切换单词书？</div>
+            <p style="color:#666; font-size:14px; margin:10px 0 20px;">
+                正在学习：<strong>{{ getBookName(currentBookId) }}</strong><br>
+                是否更换为：<strong>{{ getBookName(pendingBookId) }}</strong>
+            </p>
+            <div class="switch-btns">
+                <button class="btn-yes" @click="confirmSwitchBook">是，切换</button>
+                <button class="btn-no" @click="cancelSwitchBook">否</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 各种通用弹窗 (保持不变) -->
+    <div class="modal-overlay modal-center" v-if="showComingSoonModal">
+        <div class="modal-content-center"><div class="result-icon">🚧</div><div class="result-title">{{ comingSoonTitle }}</div><p style="color:#666;">功能开发中...</p><button class="btn btn-restart" @click="showComingSoonModal = false">关闭</button></div>
+    </div>
+    <transition name="fade"><div class="celebration-overlay" v-if="showCelebration"><div class="success-text">🎉 Excellent!</div></div></transition>
+    <div class="modal-overlay modal-bottom" v-if="showExplainModal">
+        <div class="modal-content-bottom"><div class="close-icon" @click="closeExplainModal">×</div><div class="explanation-title">回答错误</div><div class="explanation-text"><p><strong>正确意思：</strong>{{ currentQuestion?.answerText }}</p><p>{{ currentQuestion?.explanation }}</p></div><button class="btn btn-next" @click="nextQuestionFromModal">下一题</button></div>
+    </div>
+    <div class="modal-overlay modal-bottom" v-if="showAiSuccessModal">
+        <div class="modal-content-bottom"><div class="close-icon" @click="closeAiSuccessModal">×</div><div class="explanation-title" style="color: var(--success-color)">回答正确</div><div class="explanation-text"><p><strong>AI 解析：</strong></p><p style="background: #f0f9eb; padding: 10px; border-radius: 8px;">{{ aiExplanationText }}</p></div><button class="btn btn-next" @click="nextQuestionFromAiModal">下一题</button></div>
+    </div>
+    <div class="modal-overlay modal-bottom" v-if="showSentenceResultModal">
+        <div class="modal-content-bottom"><div class="close-icon" @click="closeSentenceResultModal">×</div><div class="explanation-title" :style="{color: isSentenceCorrect ? 'var(--success-color)' : 'var(--error-color)'}">{{ isSentenceCorrect ? '回答正确' : '需要改进' }}</div><div class="explanation-text"><p><strong>AI 点评：</strong>{{ sentenceFeedback }}</p><div v-if="sentenceBetterVersion" style="margin-top:10px; background:#f5f7fa; padding:10px; border-radius:8px;"><p style="margin:0; font-weight:bold; font-size:12px; color:#999;">参考答案：</p><p style="margin:5px 0 0 0;">{{ sentenceBetterVersion }}</p></div></div><button class="btn btn-next" @click="nextSentenceFromModal">下一题</button></div>
+    </div>
+    <div class="modal-overlay modal-center" v-if="showResultModal">
+        <div class="modal-content-center"><div class="result-icon">🏆</div><div class="result-title">练习结束</div><button class="btn btn-restart" @click="restartGame">重新开始</button></div>
+    </div>
+    <div class="modal-overlay modal-center" v-if="showTestResultModal">
+        <div class="modal-content-center"><div class="close-icon" @click="closeTestResultModal">×</div><div class="result-icon">📝</div><div class="result-title">测试结果</div><div class="test-score-row"><div class="score-item"><div class="score-num text-green">{{ testCorrectCount }}</div><div class="score-label">正确</div></div><div class="score-item"><div class="score-num text-red">{{ testWrongCount }}</div><div class="score-label">错误</div></div></div><button class="btn btn-restart" @click="goHome">返回主页</button></div>
+    </div>
+</div>
+
+<script>
+    const { createApp } = Vue;
+
+    // 后端API地址，如果是本地开发就是这个，上线后需要改
+    const API_BASE = "https://my-vocab-backend.onrender.com/api";
+
+    createApp({
+        data() {
+            return {
+                currentPage: 'home', 
+                roundTotal: 5, currentRoundList: [], currentIndex: 0, usedQuestionIds: [],
+                
+                // 数据不再存储在前端，而是从后端拉取
+                books: [], // 书籍列表将从后端获取
+                
+                imageLibrary: {}, aiImageSaveLibrary: {},
+                currentBookId: 'cet4', currentDetailBookId: '',
+                isBookshelfExpanded: false, showSwitchBookModal: false, pendingBookId: '',          
+
+                inputValue: "", selectedOption: null, status: 'answering', 
+                showExplainModal: false, showResultModal: false, showCelebration: false, isError: false, isImageCollapsed: false,
+                isGeneratingAI: false, aiReviewMode: false, tempAIImage: "", currentRequestId: 0,
+                isCheckingAnswer: false, showAiSuccessModal: false, aiExplanationText: "", lastUserInput: "",
+                testCorrectCount: 0, testWrongCount: 0, showTestResultModal: false,
+                showComingSoonModal: false, comingSoonTitle: "",
+                showSentenceResultModal: false, isSentenceCorrect: false, sentenceFeedback: "", sentenceBetterVersion: ""
+            };
+        },
+        async mounted() {
+            // 1. 获取书籍列表
+            try {
+                const res = await fetch(`${API_BASE}/books`);
+                this.books = await res.json();
+                // 如果没有书籍，或者默认的 'cet4' 不在列表里，默认选第一个
+                if (this.books.length > 0 && !this.books.find(b => b.id === this.currentBookId)) {
+                    this.currentBookId = this.books[0].id;
+                }
+            } catch(e) {
+                console.error("无法连接后端获取书籍", e);
+                alert("请先启动 server.py 后端服务！");
+            }
+
+            // 2. 加载本地图片缓存
+            if (window.IMAGE_LIBRARY) this.imageLibrary = window.IMAGE_LIBRARY;
+            const saved = localStorage.getItem('ai_image_save');
+            if (saved) { try { this.aiImageSaveLibrary = JSON.parse(saved); } catch(e) {} }
+        },
+        computed: {
+            currentBookObject() { return this.books.find(b => b.id === this.currentBookId) || {}; },
+            currentQuestion() { 
+                if (this.currentPage === 'study' || this.currentPage === 'test') return this.currentRoundList[this.currentIndex] || null;
+                return null;
+            },
+            currentSentence() {
+                if (this.currentPage === 'sentence') return this.currentRoundList[this.currentIndex] || null;
+                return null;
+            },
+            currentDisplayImage() {
+                if (this.aiReviewMode && this.tempAIImage) return this.tempAIImage;
+                if (this.currentPage === 'sentence' && this.currentSentence) {
+                    return this.aiImageSaveLibrary['sentence_' + this.currentSentence.id] || "";
+                }
+                if (this.currentQuestion) return this.currentQuestion.imgUrl;
+                return "";
+            },
+            hasInputText() { return this.inputValue.trim().length > 0; },
+            showFooterBtn() {
+                if (this.status !== 'answering') return true;
+                return this.hasInputText || this.selectedOption !== null;
+            }
+        },
+        methods: {
+            goToDashboard() { this.stopAI(); this.currentPage = 'study-dashboard'; },
+            goToTest() { this.currentPage = 'test'; this.roundTotal = 15; this.startNewTest(); },
+            goToSentence() { this.currentPage = 'sentence'; this.roundTotal = 5; this.startNewSentenceRound(); },
+            goHome() { this.stopAI(); this.showTestResultModal = false; this.currentPage = 'home'; },
+            showComingSoon(title) { this.comingSoonTitle = title; this.showComingSoonModal = true; },
+            
+            toggleBookshelf() { this.isBookshelfExpanded = !this.isBookshelfExpanded; },
+            onBookClick(book) {
+                if (book.id === this.currentBookId) return;
+                this.pendingBookId = book.id;
+                this.showSwitchBookModal = true;
+            },
+            confirmSwitchBook() { this.currentBookId = this.pendingBookId; this.showSwitchBookModal = false; this.pendingBookId = ''; },
+            cancelSwitchBook() { this.showSwitchBookModal = false; this.pendingBookId = ''; },
+            goToBookDetail(book) { this.currentDetailBookId = book.id; this.currentPage = 'book-detail'; },
+            goToReview() { this.currentPage = 'review'; },
+            startRealStudy() { this.currentPage = 'study'; this.roundTotal = 5; this.startNewRound(); },
+            getBookName(id) { const book = this.books.find(b => b.id === id); return book ? book.name : '未知词书'; },
+
+            // === 核心修改：改为从后端获取数据 ===
+            async startNewRound() {
+                // 请求后端接口，获取当前书籍的单词
+                try {
+                    const res = await fetch(`${API_BASE}/book_words?book_id=${this.currentBookId}`);
+                    let words = await res.json();
+                    
+                    if (!words || words.length === 0) { alert("该题库暂无数据"); return; }
+
+                    // 前端随机逻辑（简单版：从返回的所有词里随机选5个）
+                    // 实际生产环境应该在后端做分页或随机，这里为了复用旧逻辑暂时在前端做
+                    let available = words.filter(q => !this.usedQuestionIds.includes(q.id));
+                    if (available.length < this.roundTotal) { this.usedQuestionIds = []; available = [...words]; }
+                    const newRound = [];
+                    for (let i = 0; i < this.roundTotal; i++) {
+                        if (available.length === 0) break;
+                        const rIndex = Math.floor(Math.random() * available.length);
+                        newRound.push(this.formatQuestion(available[rIndex]));
+                        this.usedQuestionIds.push(available[rIndex].id);
+                        available.splice(rIndex, 1);
+                    }
+                    this.currentRoundList = newRound; 
+                    this.currentIndex = 0; 
+                    this.resetInteractionState(); 
+                    this.showResultModal = false;
+                } catch (e) {
+                    console.error(e);
+                    alert("获取单词失败");
+                }
+            },
+
+            async startNewTest() {
+                this.testCorrectCount = 0; this.testWrongCount = 0;
+                // 请求后端特殊接口获取混合题库
+                try {
+                    const res = await fetch(`${API_BASE}/book_words?book_id=all_test`);
+                    let combined = await res.json();
+                    this.currentRoundList = combined.map(q => this.formatQuestion(q));
+                    this.currentIndex = 0; 
+                    this.roundTotal = this.currentRoundList.length; 
+                    this.resetInteractionState(); 
+                    this.showTestResultModal = false;
+                } catch (e) {
+                    alert("获取测试题目失败");
+                }
+            },
+
+            async startNewSentenceRound() {
+                try {
+                    const res = await fetch(`${API_BASE}/sentences`);
+                    let db = await res.json();
+                    if (!db || db.length === 0) return;
+                    const shuffled = [...db].sort(() => 0.5 - Math.random());
+                    this.currentRoundList = shuffled.slice(0, this.roundTotal);
+                    this.currentIndex = 0; this.resetInteractionState(); this.showResultModal = false;
+                } catch (e) {
+                    alert("获取造句题目失败");
+                }
+            },
+
+            formatQuestion(raw) {
+                // options 已经是数组了（后端处理过），不需要改
+                const shuffled = [...raw.options].sort(() => 0.5 - Math.random());
+                let img = "";
+                if (this.aiImageSaveLibrary[raw.word]) img = this.aiImageSaveLibrary[raw.word];
+                else if (this.imageLibrary[raw.word]) img = this.imageLibrary[raw.word];
+                return { id: raw.id, word: raw.word, imgUrl: img, answerText: raw.answer, explanation: raw.exp, options: shuffled.map((txt, idx) => ({ id: idx, text: txt, isCorrect: txt.includes(raw.answer) })) };
+            },
+
+            // ... (AI 生图、提交逻辑等保持不变，只是 API 地址都用 API_BASE) ...
+            
+            async generateAIImage(type) {
+                if (this.isGeneratingAI) return;
+                this.isGeneratingAI = true; this.aiReviewMode = false; this.currentRequestId++;
+                const myRequestId = this.currentRequestId;
+                let prompt = "";
+                if (type === 'sentence') prompt = `illustration of "${this.currentSentence.chinese}", clear logic, educational`;
+                else prompt = `cartoon illustration of ${this.currentQuestion.word}, cute, simple vector art`;
+                const randomSeed = Math.floor(Math.random() * 9999999);
+                const apiUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=800&height=450&seed=${randomSeed}&n=${randomSeed}&t=${new Date().getTime()}`;
+                try {
+                    await this.preloadImage(apiUrl);
+                    if (this.currentRequestId === myRequestId) { this.tempAIImage = apiUrl; this.aiReviewMode = true; }
+                } catch (error) { if (this.currentRequestId === myRequestId) alert("生图失败"); } finally { if (this.currentRequestId === myRequestId) this.isGeneratingAI = false; }
+            },
+            stopAI() { this.currentRequestId++; this.isGeneratingAI = false; this.aiReviewMode = false; this.tempAIImage = ""; },
+            preloadImage(url) { return new Promise((r, j) => { const i = new Image(); i.onload = () => r(url); i.onerror = j; i.src = url; }); },
+            confirmAIImage() { 
+                const newUrl = this.tempAIImage;
+                if (this.currentPage === 'sentence') { const key = 'sentence_' + this.currentSentence.id; this.aiImageSaveLibrary[key] = newUrl; }
+                else { const word = this.currentQuestion.word; this.currentQuestion.imgUrl = newUrl; this.aiImageSaveLibrary[word] = newUrl; }
+                localStorage.setItem('ai_image_save', JSON.stringify(this.aiImageSaveLibrary));
+                this.aiReviewMode = false; this.tempAIImage = ""; 
+            },
+            rejectAIImage() { this.aiReviewMode = false; this.tempAIImage = ""; },
+            handleImgError(e) { e.target.src = "https://placehold.co/800x450/eee/999?text=Image+Error"; },
+
+            resetInteractionState() {
+                this.inputValue = ""; this.selectedOption = null; this.status = 'answering';
+                this.isError = false; this.showExplainModal = false; this.showCelebration = false;
+                this.showAiSuccessModal = false; this.isCheckingAnswer = false; 
+                this.showSentenceResultModal = false; 
+                this.stopAI();
+            },
+            toggleImage() { this.isImageCollapsed = !this.isImageCollapsed; },
+            handleInput() { if (this.inputValue.length > 0) this.selectedOption = null; },
+            selectOption(opt) { if (this.hasInputText || this.isCheckingAnswer || this.status !== 'answering') return; this.selectedOption = opt; this.inputValue = ""; },
+            cancelSelection() { if (this.status === 'answering' && !this.isCheckingAnswer) this.selectedOption = null; },
+
+            async submitAnswer() {
+                if (this.selectedOption) { if (this.selectedOption.isCorrect) this.handleCorrect(); else this.handleWrong(); return; }
+                if (this.inputValue) {
+                    const input = this.inputValue.trim();
+                    if (this.currentPage === 'test') { if (input.includes(this.currentQuestion.answerText)) this.handleCorrect(); else this.handleWrong(); return; }
+                    this.lastUserInput = input; this.isCheckingAnswer = true; 
+                    try {
+                        const response = await fetch(`${API_BASE}/check_answer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ word: this.currentQuestion.word, user_input: input }) });
+                        const result = await response.json();
+                        this.isCheckingAnswer = false; 
+                        if (result.is_correct) { this.aiExplanationText = result.explanation; this.handleCorrect(true); } else { this.handleWrong(); }
+                    } catch (error) { this.isCheckingAnswer = false; alert("AI 服务连接失败"); }
+                }
+            },
+            async submitSentence() {
+                const input = this.inputValue.trim(); if (!input) return;
+                this.isCheckingAnswer = true;
+                try {
+                    const response = await fetch(`${API_BASE}/check_sentence`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: this.currentSentence.chinese, user_input: input }) });
+                    const result = await response.json();
+                    this.isCheckingAnswer = false;
+                    this.isSentenceCorrect = result.is_correct; this.sentenceFeedback = result.feedback; this.sentenceBetterVersion = result.better_version;
+                    if (result.is_correct) { this.status = 'correct'; this.showCelebration = true; setTimeout(() => { this.showCelebration = false; }, 1500); } else { this.status = 'wrong'; this.isError = true; setTimeout(() => this.isError = false, 500); }
+                    this.showSentenceResultModal = true;
+                } catch (error) { this.isCheckingAnswer = false; alert("AI 服务连接失败"); }
+            },
+
+            handleCorrect(isFromAI = false) {
+                this.status = 'correct'; this.showCelebration = true; setTimeout(() => { this.showCelebration = false; }, 1500);
+                if (this.currentPage === 'test') this.testCorrectCount++; else if (isFromAI) this.showAiSuccessModal = true;
+            },
+            handleWrong() {
+                this.status = 'wrong'; this.isError = true; setTimeout(() => this.isError = false, 500);
+                if (this.currentPage === 'test') this.testWrongCount++;
+            },
+            
+            openExplanation() { this.showExplainModal = true; }, closeExplainModal() { this.showExplainModal = false; },
+            openAiSuccessModal() { this.showAiSuccessModal = true; }, closeAiSuccessModal() { this.showAiSuccessModal = false; },
+            closeSentenceResultModal() { this.showSentenceResultModal = false; },
+            
+            nextQuestion() { this.checkRoundProgress(); },
+            nextQuestionFromModal() { this.showExplainModal = false; this.checkRoundProgress(); },
+            nextQuestionFromAiModal() { this.showAiSuccessModal = false; this.checkRoundProgress(); },
+            nextSentence() { this.checkRoundProgress(); },
+            nextSentenceFromModal() { this.showSentenceResultModal = false; this.checkRoundProgress(); },
+
+            checkRoundProgress() {
+                if (this.currentIndex < this.roundTotal - 1) { this.currentIndex++; this.resetInteractionState(); } 
+                else { 
+                    if (this.currentPage === 'test') this.showTestResultModal = true; 
+                    else this.showResultModal = true; 
+                }
+            },
+            closeTestResultModal() { this.showTestResultModal = false; },
+            restartGame() {
+                if (this.currentPage === 'sentence') this.startNewSentenceRound();
+                else this.startNewRound();
+            }
+        }
+    }).mount('#app');
+</script>
+
+</body>
+</html>
